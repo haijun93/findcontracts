@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const nodes = {};
+const node = id => nodes[id] ||= {value: '', innerHTML: '', textContent: '', querySelectorAll: () => []};
+const pending = [];
+const context = vm.createContext({document: {getElementById: node, addEventListener() {}}, URLSearchParams, AbortController,
+  fetch: (url, options) => new Promise(resolve => pending.push({url, options, resolve}))});
+vm.runInContext(fs.readFileSync('index.html', 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1], context);
+const answer = (call, data) => call.resolve({ok: true, json: async () => data});
+const flush = async () => { for(let i=0;i<10;i++) await Promise.resolve(); };
+(async () => {
+  const first = vm.runInContext('go()', context);
+  const second = vm.runInContext('go()', context);
+  assert.equal(pending[0].options.signal.aborted, true);
+  answer(pending[1], {results: [], status: {latest: {ok: true, count: 0}}});
+  await second;
+  answer(pending[0], {results: [{name: 'stale'}], status: {}});
+  await first;
+  assert.equal(vm.runInContext('ROWS.length', context), 0);
+  assert.match(node('status').innerHTML, /latest/);
+  const third = vm.runInContext('go()', context);
+  answer(pending[2], {results: [{name: 'old company'}], status: {}});
+  await flush();
+  assert.match(pending[3].url, /mapo-contracts/);
+  const fourth = vm.runInContext('go()', context);
+  answer(pending[4], {results: [], status: {newest: {ok: true, count: 0}}});
+  await fourth;
+  answer(pending[3], {results: {'old company': {ok: true, total: 9}}});
+  await third;
+  assert.equal(vm.runInContext('ROWS.length', context), 0);
+  assert.match(node('status').innerHTML, /newest/);
+  assert.match(vm.runInContext('judge({ok:true,total:1,departments:{"부서 미확인":1}})', context), /부서 확인 필요/);
+  console.log('PASS: stale search, stale history, abort signal, and unknown department warning');
+})().catch(error => { console.error(error); process.exitCode=1; });

@@ -173,7 +173,7 @@ def mapo_excel_rows():
                     if len(row)<8 or not row[4]: continue
                     out.append({"source":"Excel·마포희망기업","type":"예비사회적기업",
                       "name":txt(str(row[4])),"item":txt(str(row[7])) if row[7] is not None else "",
-                      "phone":"","address":"마포구","bizno":digits(row[5]),"url":""})
+                      "phone":"","address":"","bizno":digits(row[5]),"url":""})
             elif "사회적협동조합" in sn:
                 for row in ws.iter_rows(min_row=5,values_only=True):
                     if len(row)<6 or not row[0]: continue
@@ -275,9 +275,37 @@ def excel_sources(q):
         if kw and kw not in hay: continue
         if co and co not in x["name"].lower(): continue
         if et and et not in hay: continue
-        if rg and rg not in ("전국","") and x["address"] and rg not in x["address"]: continue
+        if not matches_region(x["address"], rg): continue
         out.append(x)
     return out,statuses
+
+
+SEOUL_DISTRICTS = set("종로구 중구 용산구 성동구 광진구 동대문구 중랑구 성북구 강북구 도봉구 노원구 은평구 서대문구 마포구 양천구 강서구 구로구 금천구 영등포구 동작구 관악구 서초구 강남구 송파구 강동구".split())
+
+
+def address_region(address):
+    tokens = re.findall(r"[가-힣]+", address or "")
+    aliases = {"서울": "서울", "서울특별시": "서울", "경기": "경기", "경기도": "경기",
+               "인천": "인천", "인천광역시": "인천"}
+    for token in tokens:
+        if token in aliases:
+            return aliases[token], tokens
+        if token in ("부산", "부산광역시", "대구", "대구광역시", "대전", "대전광역시", "광주", "광주광역시", "울산", "울산광역시", "세종", "세종특별자치시", "충북", "충청북도", "충남", "충청남도", "전북", "전라북도", "전북특별자치도", "전남", "전라남도", "경북", "경상북도", "경남", "경상남도", "강원", "강원도", "강원특별자치도", "제주", "제주특별자치도"):
+            return token, tokens
+    if tokens and tokens[0] in SEOUL_DISTRICTS - {"중구", "강서구"}:
+        return "서울", tokens
+    return "", tokens
+
+
+def matches_region(address, region):
+    if not region or region == "전국":
+        return True
+    province, tokens = address_region(address)
+    return province == region if region in ("서울", "경기", "인천") else region in tokens
+
+
+def company_key(name):
+    return re.sub(r"\s+", "", txt(name)).casefold()
 
 
 def mapo_contract_history(company, year=None):
@@ -303,55 +331,80 @@ def mapo_contract_history(company, year=None):
         soup=BeautifulSoup(r.text,"html.parser")
         page_text=txt(soup.get_text(" ",strip=True))
         mt=re.search(r"총\s*([\d,]+)\s*건",page_text)
-        total_hint=int(mt.group(1).replace(",","")) if mt else 0
-        pages=max(1,(total_hint+49)//50)
-        contracts=[]
-        seen=set()
-        for pg in range(1,pages+1):
-            p=dict(common);p["ps_currentPageNo"]=str(pg)
-            rr=r if pg==1 else get(base,p)
-            ss=BeautifulSoup(rr.text,"html.parser")
-            # Prefer table rows. Contract pages may expose department in institution text or detail link.
-            for tr in ss.select("tr"):
-                cells=[txt(x.get_text(" ",strip=True)) for x in tr.select("th,td")]
-                rowtxt=" | ".join(cells)
-                if not cells or company.lower() not in rowtxt.lower(): continue
-                # Extract date and amount
-                dm=re.search(r"(20\d{2}[-./]\d{2}[-./]\d{2})",rowtxt)
-                date=dm.group(1).replace(".","-").replace("/","-") if dm else ""
-                # likely institution/department in first cell, project in next cell
-                institution=cells[0] if cells else "마포구"
-                project=cells[1] if len(cells)>1 else ""
-                department=""
-                # Normalize common forms: 마포구 / 부서, 마포구 부서, 서울특별시 마포구 부서
-                inst=re.sub(r"^(서울특별시\s*)?마포구\s*","",institution).strip(" >/-")
-                if inst and inst!="마포구": department=inst
-                link=tr.select_one("a[href]")
-                detail_url=urllib.parse.urljoin(rr.url,link.get("href")) if link else ""
-                # If department not present in list, inspect detail page for 담당부서/부서명.
-                if detail_url and not department:
-                    try:
-                        dr=get(detail_url); ds=BeautifulSoup(dr.text,"html.parser")
-                        dt=txt(ds.get_text(" ",strip=True))
-                        for pat in [r"(?:담당부서|발주부서|부서명)\s*[:|]?\s*([가-힣A-Za-z0-9·\s]+?)(?=\s+(?:담당자|전화|계약|사업|주소|$))",
-                                    r"기관명\s*[:|]?\s*마포구\s+([가-힣A-Za-z0-9·]+)"]:
-                            mm=re.search(pat,dt)
-                            if mm: department=txt(mm.group(1));break
-                    except Exception: pass
-                if not department: department="부서 미확인"
-                key=(date,project,rowtxt[-120:])
-                if key in seen: continue
+        if not mt:
+            raise RuntimeError("계약 검색 결과 건수를 확인할 수 없습니다")
+        total_hint = int(mt.group(1).replace(",", ""))
+        pages = max(1, (total_hint + 49) // 50)
+        if pages > 100:
+            raise RuntimeError("조회 범위를 초과했습니다. 공식 사이트에서 확인하세요")
+        contracts = []
+        seen = set()
+        parsed_rows = 0
+        for pg in range(1, pages + 1):
+            p = dict(common); p["ps_currentPageNo"] = str(pg)
+            rr = r if pg == 1 else get(base, p)
+            ss = BeautifulSoup(rr.text, "html.parser")
+            table = None
+            columns = {}
+            aliases = {"company": ("계약업체명", "업체명", "계약상대자"),
+                       "institution": ("발주기관", "기관명", "발주기관명"),
+                       "project": ("계약명", "사업명", "계약건명"),
+                       "date": ("계약일자", "계약일"),
+                       "department": ("담당부서", "발주부서", "부서명")}
+            for candidate in ss.select("table"):
+                for header in candidate.select("tr"):
+                    heads = [txt(c.get_text(" ", strip=True)) for c in header.find_all("th", recursive=False)]
+                    cols = {key: next((i for i, h in enumerate(heads) if h in labels), None)
+                            for key, labels in aliases.items()}
+                    if all(cols[k] is not None for k in ("company", "institution", "project", "date")):
+                        table, columns = candidate, cols
+                        break
+                if table is not None:
+                    break
+            if table is None:
+                raise RuntimeError("계약 결과 테이블 구조를 확인할 수 없습니다")
+            for tr in table.select("tr"):
+                cells = [txt(c.get_text(" ", strip=True)) for c in tr.find_all("td", recursive=False)]
+                if not cells:
+                    continue
+                if len(cells) == 1 and re.search(r"(?:검색|조회|계약|자료|데이터).*없", cells[0]):
+                    continue
+                if len(cells) <= max(i for i in columns.values() if i is not None):
+                    raise RuntimeError("계약 결과 행을 해석할 수 없습니다")
+                seller = cells[columns["company"]]
+                institution = cells[columns["institution"]]
+                project = cells[columns["project"]]
+                date = cells[columns["date"]].replace(".", "-").replace("/", "-").strip("-")
+                try:
+                    contract_date = datetime.date.fromisoformat(date)
+                except ValueError:
+                    raise RuntimeError("계약일자를 확인할 수 없습니다")
+                link = tr.select_one("a[href]")
+                detail_url = urllib.parse.urljoin(rr.url, link["href"]) if link else ""
+                if urllib.parse.urlparse(detail_url).scheme not in ("http", "https"):
+                    detail_url = ""
+                key = (seller, institution, date, project, detail_url)
+                if key in seen:
+                    continue
                 seen.add(key)
-                contracts.append({"date":date,"department":department,"project":project,"url":detail_url})
-        # Exact-company filter can still be necessary if site performs contains-search.
-        # Keep rows where visible row contained company; this is the strongest available public-page check.
-        depts={}
-        for c in contracts: depts[c["department"]]=depts.get(c["department"],0)+1
-        total=len(contracts)
-        # If parser missed rows but site total says >0, report total hint and unknown dept conservatively.
-        if total_hint>total:
-            depts["부서 미확인"]=depts.get("부서 미확인",0)+(total_hint-total)
-            total=total_hint
+                parsed_rows += 1
+                if company_key(seller) != company_key(company):
+                    continue
+                if not re.match(r"^(서울특별시\s*)?마포구(?:$|[\s>/\-])", institution):
+                    raise RuntimeError("발주기관이 마포구인지 확인할 수 없습니다")
+                if not (datetime.date.fromisoformat(start) <= contract_date <= datetime.date.fromisoformat(end)):
+                    raise RuntimeError("조회 기간 밖의 계약이 포함되어 있습니다")
+                department = cells[columns["department"]] if columns["department"] is not None else ""
+                if not department:
+                    department = re.sub(r"^(서울특별시\s*)?마포구", "", institution).strip(" >/-")
+                contracts.append({"date": date, "department": department or "부서 미확인",
+                                  "project": project, "url": detail_url})
+        if parsed_rows != total_hint:
+            raise RuntimeError("사이트 건수와 해석한 계약 건수가 달라 완전한 조회를 확인할 수 없습니다")
+        depts = {}
+        for c in contracts:
+            depts[c["department"]] = depts.get(c["department"], 0) + 1
+        total = len(contracts)
         dept_limit=[d for d,n in depts.items() if d!="부서 미확인" and n>=2]
         return {"ok":True,"total":total,"departments":depts,"contracts":contracts,
                 "district_limit":total>=5,"department_limit":dept_limit,
@@ -400,7 +453,7 @@ def mapo_board(q, kind):
             detail=urljoin(response.url,a['href']) if a else response.url
             found.append({'source':'마포구 관내업체' if kind=='local' else '마포구 나라장터등록',
                           'type':typ,'name':name,'item':item.strip(' /'),'phone':phone,
-                          'address':'마포구','bizno':'','url':detail})
+                          'address':'','bizno':'','url':detail})
         # Follow only actual pagination links within this board. Limit crawl to 12 pages.
         for a in soup.select('a[href]'):
             label=txt(a.get_text(' ',strip=True))
@@ -421,7 +474,7 @@ ADAPTERS={"마포구 관내업체":mapo_local,"마포구 나라장터등록":map
 @app.get("/api/search")
 def api():
     q=dict(request.args)
-    wanted=request.args.get("sources","").split(",") if request.args.get("sources") else list(ADAPTERS)
+    wanted=request.args.get("sources", "").split(",") if "sources" in request.args else list(ADAPTERS)
     rows=[]; status={}
     try:
         exrows,exstatus=excel_sources(q); rows += exrows; status.update(exstatus)
@@ -442,7 +495,7 @@ def api():
     for x in rows:
         hay=" ".join(str(v) for v in x.values()).lower()
         if co and co not in hay: continue
-        if rg and rg not in ("전국","") and x.get("address") and rg not in x.get("address",""): continue
+        if not matches_region(x.get("address", ""), rg): continue
         if et and et not in hay: continue
         filtered.append(x)
     # merge exact company records where possible
@@ -452,16 +505,16 @@ def api():
         if k not in seen:seen.add(k);merged.append(x)
     # 관내 여부는 소재지 근거로만 확정한다. 마포구청 목록 출처만으로 소재지를 단정하지 않는다.
     for x in merged:
-        addr=str(x.get("address") or "").strip()
-        if "마포구" in addr:
-            x["mapo_local_status"]="관내"
-            x["mapo_local_reason"]="소재지에 마포구 표기"
-        elif addr and any(token in addr for token in ("서울","경기","인천","부산","대구","대전","광주","울산","세종","충북","충남","전북","전남","경북","경남","강원","제주")):
-            x["mapo_local_status"]="관외"
-            x["mapo_local_reason"]="소재지가 마포구 외 지역으로 표기"
+        province, tokens = address_region(x.get("address", ""))
+        if "마포구" in tokens and province == "서울":
+            x["mapo_local_status"] = "관내"
+            x["mapo_local_reason"] = "소재지에 마포구 표기"
+        elif province and (province != "서울" or any(t in SEOUL_DISTRICTS - {"마포구"} for t in tokens)):
+            x["mapo_local_status"] = "관외"
+            x["mapo_local_reason"] = "소재지가 마포구 외 지역으로 표기"
         else:
-            x["mapo_local_status"]="확인 필요"
-            x["mapo_local_reason"]="소재지 정보 부족 또는 불명확"
+            x["mapo_local_status"] = "확인 필요"
+            x["mapo_local_reason"] = "소재지 정보 부족 또는 불명확"
     return jsonify(results=merged,count=len(merged),status=status)
 
 
