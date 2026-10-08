@@ -17,6 +17,11 @@ class ReviewRegressionTests(unittest.TestCase):
     def test_maintenance_is_failure(self):
         self.assertFalse(self.history('<html>서비스 점검 중</html>')['ok'])
 
+    def test_browser_generated_contracts_are_failure(self):
+        result = self.history(page('<script class="crypto-data">encrypted</script>'))
+        self.assertFalse(result["ok"])
+        self.assertIn("브라우저", result["error"])
+
     def test_count_without_result_table_is_failure(self):
         self.assertFalse(self.history('<p>총 0 건</p>')['ok'])
 

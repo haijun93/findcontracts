@@ -344,9 +344,11 @@ def mapo_contract_history(company, year=None):
             p = dict(common); p["ps_currentPageNo"] = str(pg)
             rr = r if pg == 1 else get(base, p)
             ss = BeautifulSoup(rr.text, "html.parser")
+            if ss.select("script.crypto-data"):
+                raise RuntimeError("계약 목록이 브라우저에서 생성되는 형식입니다. 공식 사이트에서 확인하세요")
             table = None
             columns = {}
-            aliases = {"company": ("계약업체명", "업체명", "계약상대자"),
+            aliases = {"company": ("계약업체명", "계약업체", "업체명", "계약상대자"),
                        "institution": ("발주기관", "기관명", "발주기관명"),
                        "project": ("계약명", "사업명", "계약건명"),
                        "date": ("계약일자", "계약일"),
