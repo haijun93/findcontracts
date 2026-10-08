@@ -326,18 +326,27 @@ def company_key(name):
     return re.sub(r"\s+", "", txt(name)).casefold()
 
 
+def current_date():
+    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).date()
+
+
+def contract_period(year=None):
+    today = current_date()
+    year = today.year if year is None else int(year)
+    if not 2021 <= year <= today.year:
+        raise ValueError(f"계약실적 연도는 2021~{today.year} 사이여야 합니다")
+    return year, f"{year}-01-01", today.isoformat() if year == today.year else f"{year}-12-31"
+
+
 def mapo_contract_history(company, year=None):
     """서울계약마당 계약정보에서 해당 업체의 마포구 연간 계약 실적을 조회한다."""
     company=txt(company)
     if not company:
         return {"ok":False,"total":0,"departments":{},"contracts":[],"error":"업체명 없음"}
-    today=datetime.date.today()
-    year=year or today.year
-    start=f"{year}-01-01"
-    end=today.isoformat() if year==today.year else f"{year}-12-31"
+    year, start, end = contract_period(year)
     base="https://contract.seoul.go.kr/new1/views/contractInfo.do"
     common={
-      "ps_selectForm":"0","ps_recordCountPerPage":"50","ps0_fisYear":"",
+      "ps_selectForm":"0","ps_recordCountPerPage":"50","ps0_fisYear":str(year),
       "ps0_conTitle":"","ps0_t2OfficeCd":"0","ps0_setOfficeCd":"마포구",
       "ps0_setCustNm":company,"ps0_conYmdS":start,"ps0_conYmdE":end,
       "ps0_conKind":"","ps0_conDiv":"","ps0_conMtdNm":"","ps0_conType":"",
@@ -540,6 +549,10 @@ def api():
 
 @app.get("/api/mapo-contracts")
 def mapo_contracts_api():
+    try:
+        year, start, end = contract_period(request.args.get("year"))
+    except (TypeError, ValueError):
+        return jsonify(error=f"계약실적 연도는 2021~{current_date().year} 사이의 정수로 입력하세요"), 400
     names=[txt(x) for x in request.args.getlist("company") if txt(x)]
     if not names:
         one=txt(request.args.get("company",""))
@@ -548,12 +561,12 @@ def mapo_contracts_api():
     names=list(dict.fromkeys(names))[:30]
     out={}
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-        fs={ex.submit(mapo_contract_history,n):n for n in names}
+        fs={ex.submit(mapo_contract_history,n,year):n for n in names}
         for f in concurrent.futures.as_completed(fs):
             n=fs[f]
             try: out[n]=f.result()
             except Exception as e: out[n]={"ok":False,"total":0,"departments":{},"contracts":[],"error":str(e)}
-    return jsonify(results=out)
+    return jsonify(results=out, year=year, period=f"{start} ~ {end}")
 
 @app.get("/")
 @app.get("/index.html")
