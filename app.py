@@ -3,6 +3,7 @@ import requests,re,concurrent.futures,urllib.parse,glob,os,datetime
 from openpyxl import load_workbook
 from bs4 import BeautifulSoup
 
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
 app=Flask(__name__,static_folder=".")
 H={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154 Safari/537.36"}
 
@@ -555,7 +556,14 @@ def mapo_contracts_api():
     return jsonify(results=out)
 
 @app.get("/")
-def home(): return send_from_directory(".","index.html")
+@app.get("/index.html")
+def home():
+    if not os.path.isfile(os.path.join(APP_DIR, "index.html")):
+        return ("화면 파일 index.html이 없습니다. ZIP 전체를 압축 해제한 뒤 "
+                "app.py와 index.html이 같은 폴더에 있는지 확인하세요.", 503)
+    return send_from_directory(APP_DIR, "index.html")
 if __name__=="__main__":
+    print("실행 폴더:", APP_DIR)
+    print("화면 파일:", "확인됨" if os.path.isfile(os.path.join(APP_DIR, "index.html")) else "없음: ZIP 전체를 압축 해제하세요")
     print("통합검색: http://127.0.0.1:5050")
     app.run("127.0.0.1",5050,threaded=True)
