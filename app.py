@@ -15,22 +15,39 @@ def seoul(q):
     rg=q.get("region","전국")
     p={"searchFlag":"2","recordCountPerPage":"50","currentPageNo":"1","CUS_ADDR1":"0" if rg in ("","전국") else rg,
        "a_CUS_ADDR1":rg or "전국","juso":q.get("address",""),"CUS_NM":q.get("company",""),"CUS_ITM":q.get("keyword","")}
-    r=get(u,p); soup=BeautifulSoup(r.text,"html.parser"); out=[]
-    for tr in soup.select("tr"):
+    r=get(u,p)
+    soup=BeautifulSoup(r.text,"html.parser")
+    table = next((t for t in soup.select("table")
+                  if "기업명" in t.get_text() and "주소" in t.get_text()), None)
+    if table is None:
+        raise RuntimeError("희망기업 결과 테이블 구조를 확인할 수 없습니다")
+    out=[]
+    for tr in table.select("tbody tr"):
         t=txt(tr.get_text(" ",strip=True))
-        if "사업자번호" not in t: continue
         m=re.search(r"(.+?)\(\s*사업자번호\s*:\s*([^)]+)\)",t)
-        if not m: continue
-        head=txt(m.group(1)); typ=""
-        for k in ["중증장애인생산품","장애인기업","사회적기업","사회적협동조합","여성기업","자활기업","소상공인","소기업","중기업"]:
-            if head.startswith(k+" "): typ=k; head=head[len(k):].strip(); break
-        item=re.search(r"대표품목\s*\|?\s*(.*?)\s*(?:\|\s*)?전화번호",t)
-        tel=re.search(r"전화번호\s*\|?\s*(.*?)\s*(?:\|\s*)?주소",t)
-        adr=re.search(r"주소\s*\|?\s*(.*)$",t)
-        out.append({"source":"서울계약마당","type":typ,"name":head,"item":txt(item.group(1)) if item else "",
-                    "phone":txt(tel.group(1)) if tel else "","address":txt(adr.group(1)) if adr else "",
-                    "bizno":txt(m.group(2)),"url":r.url})
+        if not m:
+            continue
+        head=txt(m.group(1))
+        sticker=tr.select_one(".company_sticker")
+        typ=txt(sticker.get_text(" ",strip=True)) if sticker else ""
+        if typ and head.startswith(typ):
+            head=head[len(typ):].strip()
+        details = tr.find_next_sibling("tr")
+        fields = {}
+        if details is not None and "사업자번호" not in details.get_text():
+            for cell in details.find_all("td", recursive=False):
+                label, separator, value = txt(cell.get_text(" ", strip=True)).partition("|")
+                if separator:
+                    fields[label.strip()] = value.strip()
+        if not all(label in fields for label in ("대표품목", "전화번호", "주소")):
+            raise RuntimeError("희망기업 상세 행을 해석할 수 없습니다")
+        out.append({"source":"서울계약마당","type":typ,"name":head,
+                    "item":fields["대표품목"],"phone":fields["전화번호"],
+                    "address":fields["주소"],"bizno":txt(m.group(2)),"url":r.url})
+    if not out and not re.search(r"총\s*0\s*건", soup.get_text(" ", strip=True)):
+        raise RuntimeError("희망기업 검색결과를 해석할 수 없습니다")
     return out
+
 
 def able(q):
     kw=q.get("keyword") or q.get("company") or ""
@@ -503,7 +520,7 @@ def api():
     # merge exact company records where possible
     merged=[]; seen=set()
     for x in filtered:
-        k=(x["source"],x["name"],x["item"],x["url"])
+        k=(x["source"],x["name"],x.get("type", ""),x["item"],x["url"])
         if k not in seen:seen.add(k);merged.append(x)
     # 관내 여부는 소재지 근거로만 확정한다. 마포구청 목록 출처만으로 소재지를 단정하지 않는다.
     for x in merged:
