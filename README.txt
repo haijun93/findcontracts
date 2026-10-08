@@ -57,3 +57,13 @@ Excel 임시파일(~$...)은 제외합니다.
 python -m unittest discover -s tests -v
 node tests/test_search_race.js
 Node.js는 화면 회귀 테스트용이며 앱 실행에는 필요하지 않습니다.
+
+404 재발 방지: launcher v2
+최신 ZIP 전체를 새 폴더에 압축 해제하고 start.bat을 실행하세요.
+실행 창에 Findcontracts launcher v2와 Application directory가 표시됩니다.
+서버 시작 및 홈페이지 응답 검증 후에만 브라우저를 엽니다.
+5050 포트가 사용 중이면 5051~5059 중 사용 가능한 포트를 선택합니다.
+수동 접속 시 고정된 5050 주소 대신 실행 창의 Open 주소를 사용하세요.
+기존 프로세스를 자동 종료하지 않으므로 이전 실행 창은 Ctrl+C로 종료하세요.
+앱 파일이 누락되면 설치/실행을 중단하고 압축 해제를 안내합니다.
+브라우저 없이 실행: python launch.py --no-browser
