@@ -7,7 +7,7 @@ import urllib.request
 import webbrowser
 
 APP_DIR = Path(__file__).resolve().parent
-VERSION = '2026-10-15-documents-v3'
+VERSION = '2026-10-15-documents-v4'
 
 
 def create_server(application, first_port=5050, attempts=10):
@@ -34,7 +34,7 @@ def verify_home(url, token):
 def main(open_browser=True):
     print(f'Findcontracts version: {VERSION}', flush=True)
     print(f'Application directory: {APP_DIR}', flush=True)
-    missing = [name for name in ('app.py', 'index.html', 'construction/core.py', 'construction/routes.py', 'construction/templates/construction.html', 'construction/static/construction.js') if not (APP_DIR / name).is_file()]
+    missing = [name for name in ('app.py', 'index.html', 'construction/core.py', 'construction/forms.py', 'construction/routes.py', 'construction/templates/construction.html', 'construction/static/construction.js') if not (APP_DIR / name).is_file()]
     if missing:
         print('Missing files: ' + ', '.join(missing), flush=True)
         print('Extract the ENTIRE ZIP into a new folder, then run start.bat.', flush=True)

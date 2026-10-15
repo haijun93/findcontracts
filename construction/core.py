@@ -6,6 +6,11 @@ from pathlib import Path
 import re
 from zipfile import ZipFile, ZIP_DEFLATED
 
+from .forms import FORM_LABELS, EXTRA_DOCUMENTS, validate_forms, form_warnings, sections as form_sections, survey_table
+
+DOCUMENTS = [('specification', '시방서'), ('plan', '추진계획서')] + EXTRA_DOCUMENTS
+DOCUMENT_LABELS = dict(DOCUMENTS)
+
 MAX_FILE = 20 * 1024 * 1024
 MAX_TEXT = 200_000
 MISSING = '[확인 필요]'
@@ -89,6 +94,8 @@ def extract_document(data, filename, role):
 def analyze(quote, request_doc):
     facts = {key: '' for key in ('title', 'purpose', 'location', 'scope', 'duration', 'department',
                                 'budget_code', 'contract_method', 'schedule')}
+    facts.update({key: '' for key in FORM_LABELS})
+    facts.update(comparisons=[])
     facts.update(items=[], sites=[], budget={key: None for key in ('subtotal', 'adjustment', 'vat', 'total')})
     evidence = []
 
@@ -101,7 +108,18 @@ def analyze(quote, request_doc):
         m = re.search(r'견\s*적\s*서\s*[(（]([^\n)）]+)[)）]', text)
         if m and not facts['title']:
             facts['title'] = clean(m[1]); record('title', facts['title'], quote, page['page'], m[0])
+        if not facts['business_number']:
+            numbers = set(re.findall(r'(?<!\d)\d{3}-\d{2}-\d{5}(?!\d)', text))
+            if len(numbers) == 1:
+                facts['business_number'] = next(iter(numbers))
+                record('business_number', facts['business_number'], quote, page['page'], facts['business_number'])
         for raw in text.splitlines():
+            party = re.search(r'상호\s+(.+?)\s+대표\s+(.+?)(?=\s{2,}|$)', raw)
+            if party and not facts['supplier']:
+                facts['supplier'] = clean(party[1])
+                facts['representative'] = clean(re.sub(r'\((?:인|서명|날인)\)', '', party[2]))
+                record('supplier', facts['supplier'], quote, page['page'], raw)
+                record('representative', facts['representative'], quote, page['page'], raw)
             line = raw.strip()
             amount = re.findall(r'(?<![\d.,])\d{1,3}(?:,\d{3})+(?![\d.,])', line)
             label = re.sub(r'\s+', '', line)
@@ -269,10 +287,13 @@ def validate_facts(value):
                 target['unit_price'] = number(row.get('unit_price'))
                 target['amount'] = number(row.get('amount'))
             result[key].append(target)
+    result.update(validate_forms(value, invalid_characters, DocumentError, number))
     return result
 
 
 def draft_sections(facts, kind):
+    if kind not in ('specification', 'plan'):
+        return form_sections(facts, kind, MISSING, money)
     f = lambda key: facts.get(key) or MISSING
     scope = f('scope')
     general = [
@@ -312,7 +333,7 @@ def render_docx(facts, kind, warnings):
         style.font.name = '맑은 고딕'
         style._element.get_or_add_rPr().rFonts.set(qn('w:eastAsia'), '맑은 고딕')
     doc.styles['Normal'].font.size = Pt(10)
-    label = '시방서' if kind == 'specification' else '추진계획서'
+    label = DOCUMENT_LABELS[kind]
     doc.add_heading(f'{facts["title"]}\n{label} (초안)', 0)
     doc.add_paragraph('담당자 검토 전 초안 · 미입력 항목은 [확인 필요] · 일반 시공 문구는 제안사항이며 현장 적합성 확인 필요')
     for heading, entries in draft_sections(facts, kind):
@@ -324,6 +345,13 @@ def render_docx(facts, kind, warnings):
             add_tables(doc, facts, budget=False)
         if kind == 'plan' and heading.startswith('Ⅲ.'):
             add_tables(doc, facts, budget=True)
+        if kind == 'price_survey' and heading.startswith('2.'):
+            doc.add_heading('비교견적 조사내역 (단위: 원)', 1)
+            headers, rows = survey_table(facts, MISSING, money)
+            table = doc.add_table(rows=1, cols=len(headers)); table.style = 'Table Grid'
+            for cell, text in zip(table.rows[0].cells, headers): cell.text = text
+            for row in rows:
+                for cell, text in zip(table.add_row().cells, row): cell.text = text
     doc.add_heading('검토 필요사항', 1)
     for warning in warnings:
         doc.add_paragraph(warning, style='List Bullet')
@@ -360,19 +388,25 @@ def add_tables(doc, facts, budget=False):
 
 
 def render_markdown(facts, kind, warnings):
-    text = [f'# {facts["title"]} — {"시방서" if kind == "specification" else "추진계획서"} (초안)',
+    text = [f'# {facts["title"]} — {DOCUMENT_LABELS[kind]} (초안)',
             '담당자 검토 전 초안. 미입력 항목은 [확인 필요]. 일반 시공 문구는 검토 제안사항입니다.']
     for heading, entries in draft_sections(facts, kind):
         text.append('## ' + heading)
         for title, content in entries: text.extend(['### ' + title, content])
-    text.append('## 공사내역')
-    for i in facts['items']:
-        text.append(f'- {i["name"]} / {i["specification"] or MISSING} / {i["quantity"] or MISSING}{i["unit"]} / 단가 {money(i["unit_price"])} / 금액 {money(i["amount"])}')
-    text.append('## 위치 목록')
-    text.extend(f'- {i["address"]} / {i["note"] or MISSING}' for i in facts['sites'])
-    if kind == 'plan':
-        text.append('## 예산 상세')
-        text.extend(f'- {label}: {money(facts["budget"][key])}' for key,label in [('subtotal','소계'),('adjustment','조정액'),('vat','부가세'),('total','총액')])
+    if kind in ('specification', 'plan'):
+        text.append('## 공사내역')
+        for i in facts['items']:
+            text.append(f'- {i["name"]} / {i["specification"] or MISSING} / {i["quantity"] or MISSING}{i["unit"]} / 단가 {money(i["unit_price"])} / 금액 {money(i["amount"])}')
+        text.append('## 위치 목록')
+        text.extend(f'- {i["address"]} / {i["note"] or MISSING}' for i in facts['sites'])
+        if kind == 'plan':
+            text.append('## 예산 상세')
+            text.extend(f'- {label}: {money(facts["budget"][key])}' for key,label in [('subtotal','소계'),('adjustment','조정액'),('vat','부가세'),('total','총액')])
+    if kind == 'price_survey':
+        headers, rows = survey_table(facts, MISSING, money)
+        text.append('## 비교견적 조사내역')
+        text.append(' / '.join(headers))
+        text.extend('- ' + ' / '.join(row) for row in rows)
     text.extend(['## 검토 필요사항', *['- ' + w for w in warnings]])
     return '\n\n'.join(text)
 
@@ -382,11 +416,14 @@ def generate_package(facts, provenance=None):
     warnings = assess(facts)
     output = BytesIO()
     with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
-        for kind, label in [('specification', '시방서_초안'), ('plan', '추진계획서_초안')]:
-            archive.writestr(label + '.docx', render_docx(facts, kind, warnings))
-            archive.writestr(label + '.md', render_markdown(facts, kind, warnings))
+        for kind, title in DOCUMENTS:
+            label = title.replace(' ', '_') + '_초안'
+            specific_warnings = warnings + form_warnings(facts, kind)
+            archive.writestr(label + '.docx', render_docx(facts, kind, specific_warnings))
+            archive.writestr(label + '.md', render_markdown(facts, kind, specific_warnings))
         manifest = {'status': '사용자 검토값 기반 초안; 자동 검증·승인된 계약문서가 아님',
                     'facts': facts, 'warnings': warnings,
+                    'form_warnings': {kind: form_warnings(facts, kind) for kind, _ in EXTRA_DOCUMENTS},
                     'source_extraction': provenance or {},
                     'note': 'source_extraction은 브라우저가 전달한 추출 기록이며 전자서명·원본 인증이 아닙니다.'}
         try:

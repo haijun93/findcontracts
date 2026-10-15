@@ -1,9 +1,11 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const fields = ['title','purpose','location','scope','duration','department','budget_code','contract_method','schedule'];
+const formFields=JSON.parse($('formFields').textContent);
 const budgetFields = ['subtotal','adjustment','vat','total'];
 const itemFields = ['name','specification','unit','quantity','unit_price','amount'];
 const siteFields = ['address','note'];
+const comparisonFields=['vendor','amount','note'];
 let analysis = null;
 
 function message(id, text, error=false) {
@@ -15,7 +17,7 @@ async function responseError(response) {
   return new Error(body.error || `요청에 실패했습니다 (${response.status}).`);
 }
 function row(kind, value={}) {
-  const keys=kind==='items'?itemFields:siteFields;
+  const keys=kind==='items'?itemFields:kind==='comparisons'?comparisonFields:siteFields;
   const tr=document.createElement('tr');
   tr.dataset.source=value.source || '사용자 입력';
   keys.forEach(key=>{
@@ -40,11 +42,11 @@ function rows(kind) {
 }
 function showAnalysis(data) {
   analysis=data;
-  for(const field of fields) $(field).value=data.facts[field]||'';
+  for(const field of [...fields,...formFields]) $(field).value=data.facts[field]||'';
   for(const field of budgetFields) $(field).value=data.facts.budget[field]??'';
-  for(const kind of ['items','sites']) {
+  for(const kind of ['items','sites','comparisons']) {
     $(kind).replaceChildren();
-    data.facts[kind].forEach(value=>row(kind,value));
+    (data.facts[kind]||[]).forEach(value=>row(kind,value));
   }
   $('warnings').replaceChildren();
   for(const warning of data.warnings) {
@@ -84,14 +86,15 @@ $('upload').addEventListener('submit',async event=>{
   } catch(error) {message('message',error.message,true);}
   finally {$('analyze').disabled=false;$('quote').disabled=false;$('request').disabled=false;}
 });
+$('addComparison').addEventListener('click',()=>{row('comparisons');$('reviewed').checked=false;});
 $('addItem').addEventListener('click',()=>row('items'));
 $('addSite').addEventListener('click',()=>row('sites'));
 $('draft').addEventListener('input',event=>{if(event.target.id!=='reviewed')$('reviewed').checked=false;});
 $('draft').addEventListener('submit',async event=>{
   event.preventDefault();if(!analysis)return;
-  const facts=Object.fromEntries(fields.map(field=>[field,$(field).value]));
+  const facts=Object.fromEntries([...fields,...formFields].map(field=>[field,$(field).value]));
   facts.budget=Object.fromEntries(budgetFields.map(field=>[field,$(field).value]));
-  facts.items=rows('items');facts.sites=rows('sites');
+  facts.items=rows('items');facts.sites=rows('sites');facts.comparisons=rows('comparisons');
   $('generate').disabled=true; $('analyze').disabled=true;
   $('quote').disabled=true;$('request').disabled=true;
   message('downloadMessage','검토값으로 초안을 작성하고 있습니다…');

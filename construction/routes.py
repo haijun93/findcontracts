@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, render_template, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
+from .forms import FORM_LABELS
 from .core import DocumentError, analyze, extract_document, generate_package
 
 blueprint = Blueprint('construction', __name__, template_folder='templates', static_folder='static', static_url_path='/construction/static')
@@ -7,7 +8,7 @@ blueprint = Blueprint('construction', __name__, template_folder='templates', sta
 
 @blueprint.get('/construction')
 def workspace():
-    return render_template('construction.html')
+    return render_template('construction.html', form_labels=FORM_LABELS)
 
 
 @blueprint.post('/api/construction/analyze')

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Findcontracts documents v3 (2026-10-15)
+echo Findcontracts documents v4 (2026-10-15)
 echo Folder: %CD%
 if not exist launch.py (
   echo ERROR: launch.py is missing. Extract the ENTIRE latest ZIP into a new folder.
