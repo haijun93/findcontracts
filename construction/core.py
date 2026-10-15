@@ -419,7 +419,10 @@ def generate_package(facts, provenance=None):
         for kind, title in DOCUMENTS:
             label = title.replace(' ', '_') + '_초안'
             specific_warnings = warnings + form_warnings(facts, kind)
-            archive.writestr(label + '.docx', render_docx(facts, kind, specific_warnings))
+            docx = render_docx(facts, kind, specific_warnings)
+            from .hwpx_export import docx_to_hwpx
+            archive.writestr(label + '.hwpx', docx_to_hwpx(docx))
+            archive.writestr(label + '.docx', docx)
             archive.writestr(label + '.md', render_markdown(facts, kind, specific_warnings))
         manifest = {'status': '사용자 검토값 기반 초안; 자동 검증·승인된 계약문서가 아님',
                     'facts': facts, 'warnings': warnings,

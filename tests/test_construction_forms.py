@@ -25,7 +25,7 @@ class SupplementalFormTests(unittest.TestCase):
                      comparisons=[{'vendor':'비교업체','amount':'3,100,000','note':'동일 범위·부가세 포함','source':'비교견적 1쪽'}])
         with ZipFile(generate_package(facts)) as z:
             names=z.namelist()
-            self.assertEqual(len(names),11)
+            self.assertEqual(len(names),16)
             self.assertEqual(len([n for n in names if n.endswith('.docx')]),5)
             for n in names:
                 if n.endswith('.docx'):

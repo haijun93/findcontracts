@@ -105,7 +105,7 @@ $('draft').addEventListener('submit',async event=>{
     const blob=await response.blob(),url=URL.createObjectURL(blob),anchor=document.createElement('a');
     anchor.href=url;anchor.download='공사문서_초안.zip';document.body.append(anchor);anchor.click();anchor.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000);
-    message('downloadMessage','초안 ZIP을 작성했습니다. 다운로드 폴더에서 Word 문서와 검토기록을 확인하세요.');
+    message('downloadMessage','초안 ZIP을 작성했습니다. 다운로드 폴더에서 HWPX·Word 문서와 검토기록을 확인하세요.');
   } catch(error){message('downloadMessage',error.message,true);}
   finally {$('generate').disabled=false;$('analyze').disabled=false;$('quote').disabled=false;$('request').disabled=false;}
 });

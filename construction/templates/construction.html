@@ -4,7 +4,7 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#172033;font-family:"Malgun Gothic",sans-serif;line-height:1.6}.wrap{max-width:1150px;margin:24px auto;padding:0 20px}header{background:#183e80;color:white;padding:26px;border-radius:16px}h1{font-size:25px;margin:0 0 8px}h2{font-size:20px}a{color:#245bd8}header a{color:white}.card{background:white;border:1px solid #dfe5ee;border-radius:14px;padding:22px;margin:18px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:block;font-weight:600}input,textarea,select{display:block;width:100%;margin:6px 0 12px;padding:10px;border:1px solid #bcc8d9;border-radius:6px;font:inherit;font-size:14px}input[type=checkbox]{display:inline;width:auto}textarea{min-height:88px}button{padding:11px 18px;border:0;border-radius:7px;background:#245bd8;color:white;font:inherit;cursor:pointer;margin:8px 6px 4px 0}button.secondary{background:#eef2f9;color:#244471}button:disabled{opacity:.5;cursor:wait}.note{font-size:13px;color:#58677d}.warning{background:#fff7df;border-left:4px solid #d39b21;padding:12px}.error{color:#a61b13;white-space:pre-wrap}.status{font-weight:600}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;border:1px solid #dfe5ee;text-align:left;vertical-align:top}td input{min-width:90px;margin:0;padding:7px}.scroll{overflow:auto}.remove{padding:5px 9px;background:#9b3333}.hidden{display:none}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:380px;overflow:auto;font-size:12px}summary{cursor:pointer;font-weight:600}.check{padding:12px 0}.check input{margin-right:8px}.evidence{max-height:330px;overflow:auto}.small{font-size:12px}.span2{grid-column:1/-1}#message{overflow-wrap:anywhere}@media(max-width:700px){.grid{grid-template-columns:1fr}.wrap{padding:0 12px}header,.card{padding:16px}}
 </style></head><body><main class="wrap">
-<header><a href="/">← 업체 통합검색</a><h1>공사 시방서·계획서 작성</h1><div>견적서와 의뢰서를 읽고, 검토한 내용으로 편집 가능한 Word 초안을 작성합니다.</div></header>
+<header><a href="/">← 업체 통합검색</a><h1>공사 시방서·계획서 작성</h1><div>견적서와 의뢰서를 읽고, 검토한 내용으로 편집 가능한 HWPX·Word 초안을 작성합니다.</div></header>
 <section class="card"><h2>1. 견적서·의뢰서 입력</h2>
 <p class="note">PDF · DOCX · XLSX · TXT / 파일당 20MB, PDF 50쪽까지. 텍스트가 없는 스캔 PDF는 OCR 처리 후 입력하세요. 파일은 처리 후 별도 보관하지 않으며 외부 AI 서비스로 전송하지 않습니다.</p>
 <form id="upload"><div class="grid"><label>견적서<input id="quote" name="quote" type="file" accept=".pdf,.docx,.xlsx,.txt" required></label><label>의뢰서<input id="request" name="request" type="file" accept=".pdf,.docx,.xlsx,.txt" required></label></div><button id="analyze" type="submit">문서 분석</button></form>
@@ -46,7 +46,7 @@
 <label>{{ form_labels[key] }}<input id="{{ key }}" maxlength="5000" placeholder="현행 정보 확인 후 입력"></label>
 {% endfor %}</div></details>
 <details><summary>추출 근거·원문 보기</summary><p class="note">이곳은 최초 추출 기록입니다. 위에서 수정한 내용은 생성 파일의 검토기록에 함께 남습니다.</p><div class="evidence"><table><thead><tr><th>항목</th><th>값</th><th>출처</th><th>원문</th></tr></thead><tbody id="evidence"></tbody></table></div><div id="sources"></div></details>
-<h3>3. 초안 작성</h3><p>시방서·추진계획서·산출기초조사서·수의계약사유서·청렴계약 이행서약서의 DOCX와 Markdown, 추출근거·검토기록 JSON을 ZIP으로 받습니다. 출력물에는 검토용 초안임을 표시합니다.</p>
+<h3>3. 초안 작성</h3><p>시방서·추진계획서·산출기초조사서·수의계약사유서·청렴계약 이행서약서의 HWPX·DOCX와 Markdown, 추출근거·검토기록 JSON을 ZIP으로 받습니다. 출력물에는 검토용 초안임을 표시합니다.</p>
 <label class="check"><input id="reviewed" type="checkbox" required>추출 내역·금액·위치를 원본과 대조했으며 미확정 항목을 확인했습니다.</label>
 <button id="generate" type="submit">공사·계약서식 5종 초안 ZIP 다운로드</button><p id="downloadMessage" aria-live="polite"></p>
 </form></section>

@@ -24,8 +24,8 @@ python launch.py
 - 입력: PDF, DOCX, XLSX, UTF-8/CP949 TXT. 파일당 20MB, PDF 1~50쪽. DOCX/XLSX의 내부 압축 해제 크기 제한도 적용합니다.
 - 텍스트가 없는 스캔 파일: OCR 처리 후 다시 입력합니다. 혼합 문서의 빈 쪽은 알림을 표시합니다.
 - 문서는 요청 처리에만 사용합니다. 업로드 파일을 별도 보관하거나 외부 AI 서비스로 보내지 않습니다. 서버의 임시 업로드 버퍼를 사용할 수 있습니다.
-- 다운로드: `시방서_초안.docx`, `추진계획서_초안.docx`, `산출기초조사서_초안.docx`, `수의계약사유서_초안.docx`, `청렴계약_이행서약서_초안.docx`, 각 문서의 `.md`, `추출근거_검토기록.json` 총 11개 파일.
-- Word 문서는 한글·Word 등 DOCX 지원 편집기에서 편집합니다. HWP 전용 형식이나 PDF 출력은 구현 범위에 포함되지 않습니다.
+- 다운로드: `시방서_초안.docx`, `추진계획서_초안.docx`, `산출기초조사서_초안.docx`, `수의계약사유서_초안.docx`, `청렴계약_이행서약서_초안.docx`, 각 문서의 `.hwpx`와 `.md`, `추출근거_검토기록.json` 총 16개 파일.
+- HWPX 문서는 HWPX 지원 한글 편집기에서, Word 문서는 DOCX 지원 편집기에서 편집합니다. 구형 HWP 바이너리 형식이나 PDF 자동 출력은 구현 범위에 포함되지 않습니다.
 - 검토기록에는 원문·파일명·SHA-256·쪽/시트 및 수정한 검토값이 포함되므로, 원본과 동일하게 취급합니다. 해시는 원본 인증이나 전자서명이 아닙니다.
 
 ## 작성 원칙
@@ -45,6 +45,7 @@ python launch.py
 | 파일 | 역할 |
 | --- | --- |
 | `construction/core.py` | 문서 추출, 근거 기록, 검토값 검증, 시방서·계획서 작성, DOCX/Markdown/ZIP 출력 |
+| `construction/hwpx_export.py` | DOCX의 본문·표를 네이티브 HWPX 구조로 변환하고 구조·재열기 검증 |
 | `construction/forms.py` | 산출기초조사서·수의계약사유서·청렴계약 이행서약서 항목·검증·문구 |
 | `construction/routes.py` | 파일 분석·문서 생성 API와 화면 Blueprint |
 | `construction/templates/construction.html` | 입력·검토·다운로드 화면 |
@@ -100,7 +101,7 @@ CHROMIUM_PATH=/usr/bin/chromium node tests/test_construction_browser.js BASE_URL
 
 ## 추가 계약서식 3종
 
-제공한 HWPX 예시의 항목과 문구 구조를 참고합니다. 원본 HWPX를 그대로 수정하는 방식이 아니며 **출력은 기존과 같은 DOCX·Markdown**입니다. HWPX 출력이나 원본의 정확한 표 배치 복제는 지원하지 않습니다.
+제공한 HWPX 예시의 항목과 문구 구조를 참고합니다. 원본 HWPX를 그대로 수정하는 방식이 아니며 **출력은 HWPX·DOCX·Markdown**입니다. HWPX는 python-hwpx로 본문·표를 다시 구성합니다. 원본의 정확한 표 배치·쪽 나눔 복제는 지원하지 않습니다.
 
 | 서식 | 반영 내용 |
 | --- | --- |
@@ -115,3 +116,13 @@ CHROMIUM_PATH=/usr/bin/chromium node tests/test_construction_browser.js BASE_URL
 청렴서약서는 **발주기관 공무원용 초안**으로, 계약업체 대표자가 서명하는 업체용 서약서와 구분합니다. 성명을 입력해도 실제 서명·직인이나 서약 완료 표시는 생성하지 않습니다. 작성/확인·서약 날짜 역시 입력값이 없으면 확인 필요로 남깁니다.
 
 API `facts`에 추가되는 필드는 `construction/forms.py`의 `FORM_LABELS`를 참고하세요. `comparisons`는 `[{vendor, amount, note, source}]` 형식이며 금액은 0 이상 원 단위 정수입니다. 부서/구 전체 계약횟수는 정수 문자열, 확인 연도는 4자리 문자열, `count_confirmation`은 빈 값·미확인·확인완료, `competitive_product`는 빈 값·미확인·예·아니오 중 하나입니다.
+
+
+## HWPX 출력 및 기존 문서 변환
+
+- 앱에서 생성하는 5종 서식에 HWPX를 추가했습니다. 기존 DOCX·Markdown도 유지합니다.
+- 기존 지주식 안내판 방침서·시방서는 저장소의 DOCX 본문과 표를 HWPX로 변환했습니다. 추가 서식 3종은 기존 견적서·의뢰서의 검토값으로 만든 초안을 HWPX로 작성했습니다.
+- `documents/sign-removal/지주식안내판_문서5종_HWPX.zip`에는 HWPX 5개만 들어 있습니다.
+- 변환은 확장자 변경이 아닙니다. `application/hwp+zip` 패키지, 본문·표 XML, 글자 모양 및 페이지 크기를 생성합니다.
+- 패키지/XML 구조 검사, 라이브러리 재열기, DOCX 원문의 모든 문단·표 셀 내용 보존을 검사합니다. 실제 한글 앱에서의 화면·인쇄 배치는 이 환경에서 확인하지 못했으므로 최종 편집 시 확인해야 합니다.
+- 본 변환기는 현재 텍스트·표로 구성된 초안에 사용합니다. 임의 DOCX의 그림·도형·복잡한 병합표를 완전 변환하는 범용 변환기를 제공하는 것은 아닙니다.

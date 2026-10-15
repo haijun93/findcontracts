@@ -79,7 +79,7 @@ class ConstructionTests(unittest.TestCase):
     def test_docx_zip_contains_two_documents_with_exact_reviewed_values(self):
         facts=analysis()['facts']; facts['duration']='착공일로부터 12일';facts['purpose']='시설 정비'
         with ZipFile(generate_package(facts)) as archive:
-            self.assertEqual(len(archive.namelist()), 11)
+            self.assertEqual(len(archive.namelist()), 16)
             for name in ('시방서_초안.docx','추진계획서_초안.docx'):
                 doc=Document(BytesIO(archive.read(name)))
                 text='\n'.join(p.text for p in doc.paragraphs)+'\n'+'\n'.join(c.text for t in doc.tables for r in t.rows for c in r.cells)
