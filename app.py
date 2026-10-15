@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 app=Flask(__name__,static_folder=".")
+from construction.routes import blueprint as construction_blueprint
+app.register_blueprint(construction_blueprint)
 H={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154 Safari/537.36"}
 
 def txt(x): return re.sub(r"\s+"," ",x or "").strip()
